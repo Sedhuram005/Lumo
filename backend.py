@@ -21,7 +21,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-import urllib.parse
+import psutil
+import ctypes
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+from ctypes import cast, POINTER
+from comtypes import CLSCTX_ALL
 
 # ----------------------------------------------------------------------
 # OS detection
@@ -412,8 +416,206 @@ def play_specific_youtube_video(video_name):
     # For now, we'll search and let user choose
     return open_chrome_youtube_video(video_name)
 
+def search_google(query):
+    """Perform a Google search."""
+    search_url = "https://www.google.com/search?q=" + quote(query)
+    webbrowser.open(search_url)
+    return f"🔍 Searching Google for '{query}'! 🌐"
+
 # ----------------------------------------------------------------------
-# Intent detection
+# Voice Listening Functions
+# ----------------------------------------------------------------------
+import speech_recognition as sr
+
+recognizer = sr.Recognizer()
+
+def listen_command():
+    """Listen for voice command and return text"""
+    with sr.Microphone() as source:
+        print("Listening...")
+        recognizer.adjust_for_ambient_noise(source)
+        audio = recognizer.listen(source)
+
+    try:
+        command = recognizer.recognize_google(audio)
+        command = command.lower()
+        print("You said:", command)
+        return command
+    except sr.UnknownValueError:
+        print("Could not understand")
+        return ""
+    except sr.RequestError:
+        print("Speech service error")
+        return ""
+
+def start_voice():
+    """Start continuous voice listening"""
+    while True:
+        command = listen_command()
+        if command == "":
+            continue
+        execute_command(command)
+
+# ----------------------------------------------------------------------
+# Strong Math Parser for Voice Commands
+# ----------------------------------------------------------------------
+def parse_math(command):
+    """Parse math expressions from voice commands (STRONG VERSION)"""
+    command = command.lower()
+
+    replacements = {
+        "plus": "+",
+        "add": "+",
+        "minus": "-",
+        "subtract": "-",
+        "multiply": "*",
+        "multiplied by": "*",
+        "times": "*",
+        "divide": "/",
+        "divided by": "/"
+    }
+
+    for word, symbol in replacements.items():
+        command = command.replace(word, symbol)
+
+    expression = re.findall(r"[0-9\+\-\*\/\.]+", command)
+
+    if expression:
+        return "".join(expression)
+
+    return None
+
+# ----------------------------------------------------------------------
+# System Control Functions
+# ----------------------------------------------------------------------
+def lock_system():
+    """Lock the computer screen."""
+    if IS_WINDOWS:
+        ctypes.windll.user32.LockWorkStation()
+        return "🔒 System locked! 🔒"
+    elif IS_MAC:
+        subprocess.run(["pmset", "displaysleepnow"])
+        return "🔒 System locked! 🔒"
+    else:
+        subprocess.run(["xdg-screensaver", "lock"])
+        return "🔒 System locked! 🔒"
+
+def mute_volume():
+    """Mute/unmute the system volume."""
+    pyautogui.press("volumemute")
+    return "🔇 Volume toggled! 🔇"
+
+def increase_volume():
+    """Increase system volume."""
+    for i in range(5):
+        pyautogui.press("volumeup")
+    return "🔊 Volume increased! 🔊"
+
+def decrease_volume():
+    """Decrease system volume."""
+    for i in range(5):
+        pyautogui.press("volumedown")
+    return "🔉 Volume decreased! 🔉"
+
+def take_screenshot():
+    """Take a screenshot and save it."""
+    try:
+        screenshot = pyautogui.screenshot()
+        filename = f"screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        
+        # Save to current directory
+        filepath = os.path.join(os.getcwd(), filename)
+        screenshot.save(filepath)
+        
+        return f"📸 Screenshot saved as {filename}! 📸\n\n📁 Location: {filepath}"
+        
+    except Exception as e:
+        return f"❌ Failed to take screenshot: {str(e)}"
+
+def check_battery():
+    """Check battery status."""
+    battery = psutil.sensors_battery()
+    if battery:
+        percent = battery.percent
+        plugged = battery.power_plugged
+        
+        if plugged:
+            return f"🔋 Battery is {percent}% and charging! 🔋"
+        else:
+            if percent < 20:
+                return f"⚠️ Battery is {percent}% - Low battery! ⚠️"
+            else:
+                return f"🔋 Battery is {percent}% 🔋"
+    else:
+        return "🔌 No battery detected (desktop system) 🔌"
+
+def cpu_usage():
+    """Check CPU usage."""
+    cpu = psutil.cpu_percent(interval=1)
+    if cpu < 50:
+        return f"💻 CPU usage is {cpu}% - Normal 💻"
+    elif cpu < 80:
+        return f"⚠️ CPU usage is {cpu}% - Moderate ⚠️"
+    else:
+        return f"🔥 CPU usage is {cpu}% - High! 🔥"
+
+def calculate_in_calculator(command):
+    """Calculate math expression in Windows calculator (FORCE FRESH VERSION)"""
+    try:
+        print(f"🧮 Parsing math from: {command}")
+        expression = parse_math(command)
+
+        if not expression:
+            print("❌ No math expression found")
+            return "❌ No math expression found"
+
+        print(f"📝 Math expression: {expression}")
+
+        # close previous calculator (important) - ignore if not running
+        try:
+            print("🔄 Closing previous calculator...")
+            subprocess.call("taskkill /IM Calculator.exe /F", shell=True)
+        except:
+            print("ℹ️ No calculator running, opening fresh")
+
+        time.sleep(1)
+
+        # open fresh calculator
+        print("🚀 Opening fresh calculator...")
+        subprocess.Popen("calc")
+
+        time.sleep(2)
+
+        # clear calculator
+        print("🗑️ Clearing calculator...")
+        pyautogui.press("esc")
+
+        # type expression
+        print(f"⌨️ Typing expression: {expression}")
+        pyautogui.write(expression)
+
+        # calculate
+        print("🎯 Calculating...")
+        pyautogui.press("enter")
+        
+        result = f"🧮 Calculator opened! {expression} calculated! 🧮"
+        print(f"✅ Success: {result}")
+        return result
+            
+    except Exception as e:
+        print(f"❌ Calculator error: {e}")
+        return f"❌ Error: {e}"
+
+def calculate(command):
+    """Calculate math expression in Windows calculator"""
+    return calculate_in_calculator(command)
+
+def open_calculator_with_math(math_expression):
+    """Open calculator and perform math calculation automatically (legacy function)"""
+    return calculate(f"calculate {math_expression}")
+
+# ----------------------------------------------------------------------
+# Intent detection and command execution
 # ----------------------------------------------------------------------
 def detect_intent(command):
     cmd = command.lower()
@@ -426,14 +628,43 @@ def detect_intent(command):
         return "folder"
     elif "open" in cmd:
         return "app"
+    elif "calculate" in cmd:
+        return "calculate"
     elif "calculator" in cmd or "calc" in cmd:
-        return "calculator"
+        # Check if there's a math expression with calculator
+        math_match = re.search(r'(\d+\s*[+\-*/]\s*\d+)', cmd)
+        if math_match:
+            return "calculator_math"
+        else:
+            return "calculator"
+    elif "add" in cmd and re.search(r'(\d+\s*[+\-*/]\s*\d+)', cmd):
+        return "calculator_math"
+    elif "multiply" in cmd and re.search(r'(\d+\s*[+\-*/]\s*\d+)', cmd):
+        return "calculator_math"
+    elif "divide" in cmd and re.search(r'(\d+\s*[+\-*/]\s*\d+)', cmd):
+        return "calculator_math"
+    elif "subtract" in cmd and re.search(r'(\d+\s*[+\-*/]\s*\d+)', cmd):
+        return "calculator_math"
     elif "list files" in cmd or "show files" in cmd:
         return "files"
     elif "search" in cmd:
         return "search"
     elif re.search(r'(\d+\s*[+\-*/]\s*\d+)', cmd):
         return "math"
+    elif "lock system" in cmd or "lock computer" in cmd:
+        return "lock"
+    elif "mute volume" in cmd or "mute" in cmd:
+        return "mute"
+    elif "increase volume" in cmd or "volume up" in cmd or "turn up volume" in cmd:
+        return "volume_up"
+    elif "decrease volume" in cmd or "volume down" in cmd or "turn down volume" in cmd:
+        return "volume_down"
+    elif "screenshot" in cmd or "take screenshot" in cmd or "capture screen" in cmd:
+        return "screenshot"
+    elif "battery" in cmd or "check battery" in cmd:
+        return "battery"
+    elif "cpu usage" in cmd or "cpu" in cmd:
+        return "cpu"
     elif cmd.startswith('run ') or cmd in ['ipconfig', 'ifconfig', 'dir', 'ls', 'pwd']:
         return "system"
     else:
@@ -449,6 +680,25 @@ def execute_command(command):
     """
     cmd = command.strip()
     lower = cmd.lower()
+    
+    print(f"🎯 Processing command: {cmd}")
+    
+    # Force calculator for every math command - more precise detection
+    if ("calculate" in lower or 
+        "plus" in lower or 
+        "minus" in lower or 
+        "multiply" in lower or 
+        "times" in lower or 
+        "divide" in lower or
+        "divided by" in lower or
+        "+" in cmd or 
+        "-" in cmd or 
+        "*" in cmd or 
+        "/" in cmd or
+        "multiplied by" in lower):
+        
+        print(f"🧮 Math command detected, using calculator")
+        return calculate_in_calculator(command)
     
     # Detect intent
     intent = detect_intent(cmd)
@@ -480,6 +730,16 @@ def execute_command(command):
             return open_application(app)
     elif intent == "calculator":
         return open_application("calculator")
+    elif intent == "calculate":
+        return calculate(cmd)
+    elif intent == "calculator_math":
+        # Extract the math expression
+        math_match = re.search(r'(\d+\s*[+\-*/]\s*\d+)', cmd)
+        if math_match:
+            math_expr = math_match.group(1)
+            return open_calculator_with_math(math_expr)
+        else:
+            return open_application("calculator")
     elif intent == "files":
         if 'desktop' in lower:
             desktop = os.path.join(os.path.expanduser('~'), 'Desktop')
@@ -513,6 +773,20 @@ def execute_command(command):
                     return f"🧮 Let me calculate that for you... {expr} = {result}! 🎯\n\nAnything else you'd like me to help with? 😊"
                 except:
                     return "Oops! I had trouble with that calculation! 🤷‍♂️"
+    elif intent == "lock":
+        return lock_system()
+    elif intent == "mute":
+        return mute_volume()
+    elif intent == "volume_up":
+        return increase_volume()
+    elif intent == "volume_down":
+        return decrease_volume()
+    elif intent == "screenshot":
+        return take_screenshot()
+    elif intent == "battery":
+        return check_battery()
+    elif intent == "cpu":
+        return cpu_usage()
     elif intent == "system":
         if lower.startswith('run '):
             sys_cmd = cmd[4:].strip()
@@ -529,5 +803,11 @@ def execute_command(command):
             "📁 Create folders\n"
             "📂 List files\n"
             "🔢 Do math (like 2+2)\n"
-            "💻 Run system commands\n\n"
+            "💻 Run system commands\n"
+            "🔒 Lock system\n"
+            "🔇 Mute/unmute volume\n"
+            "🔊 Increase/decrease volume\n"
+            "📸 Take screenshots\n"
+            "🔋 Check battery\n"
+            "💻 Check CPU usage\n\n"
             "Just try one of these and I'll do my best to help! 🚀")
